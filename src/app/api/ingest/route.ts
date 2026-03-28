@@ -169,7 +169,7 @@ export async function GET() {
   try {
     const intents = await getAllIntents();
     return NextResponse.json({ intents });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Database Error' }, { status: 500 });
   }
 }
@@ -182,7 +182,7 @@ export async function PATCH(request: NextRequest) {
     }
     await updateIntentStatus(id, status);
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Database Update Error' }, { status: 500 });
   }
 }

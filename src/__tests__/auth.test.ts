@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { authConfig } from '../lib/auth/config';
+import { NextRequest } from 'next/server';
 
 describe('Auth Configuration - authorized callback', () => {
   const authorized = authConfig.callbacks?.authorized;
@@ -8,65 +9,46 @@ describe('Auth Configuration - authorized callback', () => {
     throw new Error('Authorized callback is not a function');
   }
 
+  // Helper to mock the context for the authorized callback
+  const createCtx = (pathname: string, auth: unknown = null, headers: Record<string, string> = {}) => ({
+    auth,
+    request: {
+      nextUrl: { pathname } as unknown as URL,
+      headers: { get: (name: string) => headers[name] || null } as unknown as Headers,
+      url: `http://localhost${pathname}`
+    } as unknown as NextRequest
+  });
+
   it('should allow access to public routes without authentication', () => {
-    const result = authorized({
-      auth: null,
-      request: { 
-        nextUrl: { pathname: '/' } as any,
-        headers: { get: () => null } as any
-      } as any
-    });
+    const ctx = createCtx('/', null);
+    const result = authorized(ctx as unknown as Parameters<NonNullable<typeof authorized>>[0]);
     expect(result).toBe(true);
   });
 
   it('should redirect unauthenticated users from /operator', () => {
     vi.stubEnv('NODE_ENV', 'production');
-    const result = authorized({
-      auth: null,
-      request: { 
-        next_url: { pathname: '/operator' } as any,
-        url: 'http://localhost/operator',
-        nextUrl: { pathname: '/operator' } as any,
-        headers: { get: () => null } as any
-      } as any
-    });
+    const ctx = createCtx('/operator', null);
+    const result = authorized(ctx as unknown as Parameters<NonNullable<typeof authorized>>[0]);
     expect(result).toBe(false);
     vi.unstubAllEnvs();
   });
 
   it('should allow authenticated users to access /operator', () => {
-    const result = authorized({
-      auth: { user: { name: 'Admin' }, expires: '' },
-      request: { 
-        nextUrl: { pathname: '/operator' } as any,
-        headers: { get: () => null } as any
-      } as any
-    });
+    const ctx = createCtx('/operator', { user: { name: 'Admin' }, expires: '' });
+    const result = authorized(ctx as unknown as Parameters<NonNullable<typeof authorized>>[0]);
     expect(result).toBe(true);
   });
 
   it('should allow Playwright bypass via header', () => {
-    const result = authorized({
-      auth: null,
-      request: { 
-        nextUrl: { pathname: '/operator' } as any,
-        headers: { get: (name: string) => name === 'x-playwright-test' ? 'true' : null } as any
-      } as any
-    });
+    const ctx = createCtx('/operator', null, { 'x-playwright-test': 'true' });
+    const result = authorized(ctx as unknown as Parameters<NonNullable<typeof authorized>>[0]);
     expect(result).toBe(true);
   });
 
   it('should allow bypass if NODE_ENV is test', () => {
     vi.stubEnv('NODE_ENV', 'test');
-    
-    const result = authorized({
-      auth: null,
-      request: { 
-        nextUrl: { pathname: '/operator' } as any,
-        headers: { get: () => null } as any
-      } as any
-    });
-    
+    const ctx = createCtx('/operator', null);
+    const result = authorized(ctx as unknown as Parameters<NonNullable<typeof authorized>>[0]);
     expect(result).toBe(true);
     vi.unstubAllEnvs();
   });

@@ -21,6 +21,8 @@ export interface GeminiInputParts {
   audioMimeType?: string;
 }
 
+type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
 /**
  * Extract structured intent from multi-modal input via Gemini 3.1 Pro.
  * Supports text, image (inline base64), and audio (inline base64).
@@ -35,7 +37,7 @@ Combine all available modalities to produce the most accurate assessment.
 Your output must be strictly valid JSON matching the schema parameters exactly.`;
 
   // Build content parts dynamically based on available modalities
-  const contentParts: any[] = [];
+  const contentParts: GeminiPart[] = [];
   const modalities: string[] = [];
 
   if (parts.text) {

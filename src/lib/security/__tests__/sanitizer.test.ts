@@ -16,7 +16,7 @@ describe('sanitizeTextInput', () => {
   });
 
   it('should reject null/undefined input', () => {
-    const result = sanitizeTextInput(null as any);
+    const result = sanitizeTextInput(null as unknown as string);
     expect(result.isValid).toBe(false);
   });
 

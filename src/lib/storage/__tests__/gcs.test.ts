@@ -23,8 +23,7 @@ import { uploadFile, getLocalFile } from '../gcs';
 
 // Reset the global local file store before each test
 beforeEach(() => {
-  const globalAny: any = global;
-  globalAny.__localFileStore = new Map();
+  global.__localFileStore = new Map();
   mockSave.mockClear();
   mockFile.mockClear();
   mockBucket.mockClear();

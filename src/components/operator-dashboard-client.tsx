@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ShieldAlert, Check, Clock, Image as ImageIcon, Mic, LogOut, User, FileAudio } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { signOut } from "next-auth/react";
+import Image from "next/image";
 
 interface Attachment {
   type: 'image' | 'audio';
@@ -89,7 +90,13 @@ export default function OperatorDashboardClient({ user }: { user: UserSession })
           
           <div className="flex items-center gap-3 bg-slate-800/50 px-4 py-2 rounded-lg border border-slate-700/50">
             {user.image ? (
-              <img src={user.image} alt="" className="w-8 h-8 rounded-full border border-slate-600" />
+              <Image 
+                src={user.image} 
+                alt="" 
+                width={32} 
+                height={32} 
+                className="w-8 h-8 rounded-full border border-slate-600" 
+              />
             ) : (
               <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center border border-slate-600">
                 <User className="w-4 h-4 text-slate-400" />
@@ -215,9 +222,11 @@ export default function OperatorDashboardClient({ user }: { user: UserSession })
                             {a.type === 'image' ? (
                               <>
                                 <div className="aspect-video w-full bg-slate-800 flex items-center justify-center overflow-hidden">
-                                  <img 
+                                  <Image 
                                     src={a.public_url} 
                                     alt={a.original_name} 
+                                    width={320}
+                                    height={180}
                                     className="w-full h-full object-contain hover:scale-105 transition-transform"
                                   />
                                 </div>

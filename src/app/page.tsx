@@ -6,6 +6,8 @@ import {
   AlertCircle, Send, CheckCircle, Image as ImageIcon,
   Mic, MicOff, Type as TypeIcon, X, FileAudio, Upload
 } from 'lucide-react';
+import Image from 'next/image';
+import { IntentDocument } from '@/lib/db/firestore-mock';
 
 type InputMode = 'text' | 'image' | 'voice';
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -13,7 +15,7 @@ type SubmitStatus = 'idle' | 'loading' | 'success' | 'error';
 export default function ConsumerPortal() {
   const [text, setText] = useState('');
   const [status, setStatus] = useState<SubmitStatus>('idle');
-  const [intentResult, setIntentResult] = useState<any>(null);
+  const [intentResult, setIntentResult] = useState<IntentDocument | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [activeMode, setActiveMode] = useState<InputMode>('text');
 
@@ -152,9 +154,10 @@ export default function ConsumerPortal() {
       setText('');
       clearImage();
       clearAudio();
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setErrorMessage(err.message || 'Failed to connect to dispatch center.');
+      const message = err instanceof Error ? err.message : 'Failed to connect to dispatch center.';
+      setErrorMessage(message);
       setStatus('error');
       setTimeout(() => setStatus('idle'), 4000);
     }
@@ -162,7 +165,7 @@ export default function ConsumerPortal() {
 
   const hasInput = text.trim() || selectedImage || audioBlob;
 
-  const modeButtons: { mode: InputMode; icon: any; label: string }[] = [
+  const modeButtons: { mode: InputMode; icon: React.ElementType; label: string }[] = [
     { mode: 'text', icon: TypeIcon, label: 'Text' },
     { mode: 'image', icon: ImageIcon, label: 'Image' },
     { mode: 'voice', icon: Mic, label: 'Voice' },
@@ -281,9 +284,11 @@ export default function ConsumerPortal() {
                     </div>
                   ) : (
                     <div className="relative">
-                      <img
+                      <Image
                         src={imagePreview}
                         alt="Selected image preview"
+                        width={400}
+                        height={160}
                         className="w-full h-40 object-cover rounded-xl border border-slate-200"
                       />
                       <button
@@ -476,13 +481,15 @@ export default function ConsumerPortal() {
                   <div>
                     <h3 className="text-xs font-bold uppercase text-slate-400 mb-2">Attached Media</h3>
                     <div className="space-y-3">
-                      {intentResult.attachments.map((a: any, i: number) => (
+                      {intentResult.attachments.map((a, i) => (
                         <div key={i} className="rounded-xl overflow-hidden border border-slate-100 bg-slate-50 p-2">
                           {a.type === 'image' ? (
                             <div className="space-y-2">
-                              <img 
+                              <Image 
                                 src={a.public_url} 
                                 alt={a.original_name} 
+                                width={400}
+                                height={192}
                                 className="w-full h-48 object-cover rounded-lg shadow-sm"
                               />
                               <p className="text-[10px] text-slate-400 px-1 truncate">{a.original_name}</p>

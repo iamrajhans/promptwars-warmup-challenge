@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { checkRateLimit, resetRateLimit, clearAllRateLimits, runCleanup } from '../rate-limiter';
 
 describe('Rate Limiter', () => {
@@ -95,8 +95,7 @@ describe('Rate Limiter', () => {
       checkRateLimit('stale.ip');
 
       // Manually backdate the timestamp so it falls outside the window
-      const globalAny: any = global;
-      const store: Map<string, any> = globalAny.__rateLimitStore;
+      const store = global.__rateLimitStore!;
       const entry = store.get('stale.ip')!;
       entry.timestamps = [Date.now() - 70 * 1000]; // 70 seconds ago, beyond 60s window
 
@@ -127,8 +126,7 @@ describe('Rate Limiter', () => {
     it('should only delete entries with no remaining timestamps after sliding', () => {
       // IP with 1 stale + 1 fresh timestamp
       checkRateLimit('mixed.ip');
-      const globalAny: any = global;
-      const store: Map<string, any> = globalAny.__rateLimitStore;
+      const store = global.__rateLimitStore!;
       const entry = store.get('mixed.ip')!;
       // Add one very old timestamp alongside the fresh one
       entry.timestamps.unshift(Date.now() - 65 * 1000);

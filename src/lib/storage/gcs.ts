@@ -13,11 +13,18 @@ export interface UploadResult {
 }
 
 // Local fallback store for when GCS credentials aren't available
-const globalAny: any = global;
-if (!globalAny.__localFileStore) {
-  globalAny.__localFileStore = new Map<string, string>();
+declare global {
+  var __localFileStore: Map<string, string> | undefined;
 }
-const localStore: Map<string, string> = globalAny.__localFileStore;
+
+const getLocalStore = (): Map<string, string> => {
+  if (!global.__localFileStore) {
+    global.__localFileStore = new Map<string, string>();
+  }
+  return global.__localFileStore;
+};
+
+const localStore: Map<string, string> = getLocalStore();
 
 /**
  * Upload a file buffer to Google Cloud Storage or local fallback.

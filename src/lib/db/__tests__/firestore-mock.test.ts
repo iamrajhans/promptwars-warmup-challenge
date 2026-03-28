@@ -12,9 +12,8 @@ const makeIntent = (overrides = {}) => ({
 });
 
 beforeEach(() => {
-  const globalAny: any = global;
-  // Reset global store for isolation (covers the `if (!globalAny.mockIntents)` branch = false)
-  globalAny.mockIntents = [];
+  // Reset global store for isolation (covers the `if (!global.mockIntents)` branch = false)
+  global.mockIntents = [];
 });
 
 describe('saveIntent', () => {
@@ -45,8 +44,8 @@ describe('saveIntent', () => {
 
   it('should save with attachments when provided', async () => {
     const attachments = [
-      { type: 'image' as const, gcs_uri: 'gs://bucket/img.jpg', original_name: 'crash.jpg', mime_type: 'image/jpeg' },
-      { type: 'audio' as const, gcs_uri: 'gs://bucket/audio.webm', original_name: 'voice.webm', mime_type: 'audio/webm' },
+      { type: 'image' as const, gcs_uri: 'gs://bucket/img.jpg', public_url: 'https://cdn.com/img.jpg', original_name: 'crash.jpg', mime_type: 'image/jpeg' },
+      { type: 'audio' as const, gcs_uri: 'gs://bucket/audio.webm', public_url: 'https://cdn.com/audio.webm', original_name: 'voice.webm', mime_type: 'audio/webm' },
     ];
     const doc = await saveIntent(makeIntent(), attachments);
 

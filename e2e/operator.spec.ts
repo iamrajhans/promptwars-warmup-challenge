@@ -7,7 +7,7 @@ const mockIntents = [
     urgency: 5,
     recommended_action: 'Dispatch fire units immediately',
     input_modalities: ['text', 'image'],
-    attachments: [{ type: 'image', gcs_uri: 'local://img', original_name: 'fire.jpg', mime_type: 'image/jpeg' }],
+    attachments: [{ type: 'image', gcs_uri: 'local://img', public_url: 'http://localhost/img', original_name: 'fire.jpg', mime_type: 'image/jpeg' }],
     status: 'pending',
     timestamp: new Date().toISOString(),
     raw_text: 'Fire at the factory',
@@ -94,7 +94,7 @@ test.describe('Operator Dashboard — /operator', () => {
   });
 
   test('should call PATCH when acknowledge button is clicked', async ({ page }) => {
-    let patchBody: any = null;
+    let patchBody: unknown = null;
 
     await page.route('/api/ingest', route => {
       if (route.request().method() === 'PATCH') {

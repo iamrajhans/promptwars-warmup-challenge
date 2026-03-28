@@ -12,11 +12,19 @@ const WINDOW_MS = 60 * 1000; // 1 minute
 const MAX_REQUESTS = 10;
 
 // Global store survives HMR in Next.js dev
-const globalAny: any = global;
-if (!globalAny.__rateLimitStore) {
-  globalAny.__rateLimitStore = new Map<string, RateLimitEntry>();
+declare global {
+  var __rateLimitStore: Map<string, RateLimitEntry> | undefined;
+  var __rateLimitCleanup: NodeJS.Timeout | undefined;
 }
-const store: Map<string, RateLimitEntry> = globalAny.__rateLimitStore;
+
+const getStore = (): Map<string, RateLimitEntry> => {
+  if (!global.__rateLimitStore) {
+    global.__rateLimitStore = new Map<string, RateLimitEntry>();
+  }
+  return global.__rateLimitStore;
+};
+
+const store: Map<string, RateLimitEntry> = getStore();
 
 // Exported for testing purposes
 export function runCleanup(): void {
@@ -30,8 +38,8 @@ export function runCleanup(): void {
 }
 
 // Periodic cleanup to prevent memory leaks (every 5 minutes)
-if (!globalAny.__rateLimitCleanup) {
-  globalAny.__rateLimitCleanup = setInterval(runCleanup, 5 * 60 * 1000);
+if (!global.__rateLimitCleanup) {
+  global.__rateLimitCleanup = setInterval(runCleanup, 5 * 60 * 1000);
 }
 
 export interface RateLimitResult {

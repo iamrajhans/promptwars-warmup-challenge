@@ -11,7 +11,7 @@ export interface Attachment {
 export interface HistoryEvent {
   timestamp: string;
   action: 'Created' | 'Status Changed';
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface IntentDocument extends ParsedIntent {
@@ -23,10 +23,16 @@ export interface IntentDocument extends ParsedIntent {
 }
 
 // In Next.js dev environments, attach to global so it survives HMR
-const globalAny: any = global;
-if (!globalAny.mockIntents) {
-  globalAny.mockIntents = [];
+declare global {
+  var mockIntents: IntentDocument[] | undefined;
 }
+
+const getMockIntents = (): IntentDocument[] => {
+  if (!global.mockIntents) {
+    global.mockIntents = [];
+  }
+  return global.mockIntents;
+};
 
 export async function saveIntent(
   intent: ParsedIntent,
@@ -47,19 +53,19 @@ export async function saveIntent(
       },
     ],
   };
-  globalAny.mockIntents.unshift(newDoc);
+  getMockIntents().unshift(newDoc);
   return newDoc;
 }
 
 export async function getAllIntents(): Promise<IntentDocument[]> {
-  return globalAny.mockIntents || [];
+  return global.mockIntents || [];
 }
 
 export async function updateIntentStatus(
   id: string,
   status: IntentDocument['status']
 ): Promise<void> {
-  const intent = globalAny.mockIntents.find((i: IntentDocument) => i.id === id);
+  const intent = getMockIntents().find((i: IntentDocument) => i.id === id);
   if (intent) {
     const oldStatus = intent.status;
     intent.status = status;
