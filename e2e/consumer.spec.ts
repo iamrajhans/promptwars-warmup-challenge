@@ -176,9 +176,27 @@ test.describe('Consumer Portal — Tab Navigation', () => {
     await expect(page.getByRole('button', { name: /upload an image/i })).toBeVisible();
   });
 
+  test('should lazy-load the image panel only after selecting the tab', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: /upload an image/i })).toHaveCount(0);
+
+    await page.getByRole('tab', { name: 'Image' }).click();
+
+    await expect(page.getByRole('button', { name: /upload an image/i })).toBeVisible();
+  });
+
   test('should switch to Voice tab and show record button', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('tab', { name: 'Voice' }).click();
+    await expect(page.getByRole('button', { name: /start voice recording/i })).toBeVisible();
+  });
+
+  test('should lazy-load the voice panel only after selecting the tab', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: /start voice recording/i })).toHaveCount(0);
+
+    await page.getByRole('tab', { name: 'Voice' }).click();
+
     await expect(page.getByRole('button', { name: /start voice recording/i })).toBeVisible();
   });
 
@@ -195,6 +213,11 @@ test.describe('Consumer Portal — Accessibility', () => {
     await page.goto('/');
     const skipLink = page.getByText('Skip to intake form');
     await expect(skipLink).toBeAttached();
+  });
+
+  test('should render the server shell guidance copy', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText(/form loads the text workflow first/i)).toBeVisible();
   });
 
   test('should have correct page title', async ({ page }) => {

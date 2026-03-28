@@ -1,30 +1,19 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { ShieldAlert, Check, Clock, Image as ImageIcon, Mic, LogOut, User, FileAudio } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { startTransition, useEffect, useRef, useState } from "react";
+import {
+  Check,
+  Clock,
+  FileAudio,
+  Image as ImageIcon,
+  LogOut,
+  Mic,
+  ShieldAlert,
+  User,
+} from "lucide-react";
 import { signOut } from "next-auth/react";
 import Image from "next/image";
-
-interface Attachment {
-  type: 'image' | 'audio';
-  gcs_uri: string;
-  public_url: string;
-  original_name: string;
-  mime_type: string;
-}
-
-interface Intent {
-  id: string;
-  raw_text: string;
-  intent_summary: string;
-  urgency: number;
-  recommended_action: string;
-  status: 'pending' | 'acknowledged' | 'resolved';
-  timestamp: string;
-  input_modalities?: string[];
-  attachments?: Attachment[];
-}
+import type { IntentDocument } from "@/lib/db/firestore-mock";
 
 interface UserSession {
   name?: string | null;
@@ -32,87 +21,174 @@ interface UserSession {
   image?: string | null;
 }
 
-export default function OperatorDashboardClient({ user }: { user: UserSession }) {
-  const [intents, setIntents] = useState<Intent[]>([]);
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+});
 
-  // Polling mechanism (mock real-time)
+export default function OperatorDashboardClient({
+  user,
+  initialIntents,
+}: {
+  user: UserSession;
+  initialIntents: IntentDocument[];
+}) {
+  const [intents, setIntents] = useState(initialIntents);
+  const pollTimeoutRef = useRef<number | null>(null);
+  const isFetchingRef = useRef(false);
+  const refreshIntentsRef = useRef<(() => Promise<void>) | null>(null);
+  const scheduleNextRefreshRef = useRef<((delayMs?: number) => void) | null>(null);
+
+  const pendingCount = intents.filter((intent) => intent.status === "pending").length;
+  const criticalCount = intents.filter(
+    (intent) => intent.urgency >= 4 && intent.status === "pending"
+  ).length;
+
   useEffect(() => {
-    const fetchIntents = async () => {
+    const refreshIntents = async () => {
+      if (isFetchingRef.current) {
+        return;
+      }
+
+      isFetchingRef.current = true;
+
       try {
-        const res = await fetch('/api/ingest');
-        const data = await res.json();
-        if (data.intents) {
-          setIntents(data.intents);
+        const response = await fetch("/api/ingest", { cache: "no-store" });
+
+        if (!response.ok) {
+          return;
         }
-      } catch (err) {
-        console.error("Failed to fetch intents", err);
+
+        const data = await response.json();
+
+        if (data.intents) {
+          startTransition(() => {
+            setIntents(data.intents);
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch intents", error);
+      } finally {
+        isFetchingRef.current = false;
+        scheduleNextRefresh();
       }
     };
 
-    fetchIntents();
-    const interval = setInterval(fetchIntents, 2000);
-    return () => clearInterval(interval);
+    const scheduleNextRefresh = (delayMs?: number) => {
+      if (pollTimeoutRef.current) {
+        window.clearTimeout(pollTimeoutRef.current);
+      }
+
+      const nextDelay = delayMs ?? (document.hidden ? 30000 : 10000);
+
+      pollTimeoutRef.current = window.setTimeout(() => {
+        void refreshIntents();
+      }, nextDelay);
+    };
+
+    refreshIntentsRef.current = refreshIntents;
+    scheduleNextRefreshRef.current = scheduleNextRefresh;
+    void refreshIntents();
+
+    const handleVisibilityChange = () => {
+      scheduleNextRefresh(document.hidden ? 30000 : 2000);
+
+      if (!document.hidden) {
+        void refreshIntents();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+      if (pollTimeoutRef.current) {
+        window.clearTimeout(pollTimeoutRef.current);
+      }
+
+      refreshIntentsRef.current = null;
+      scheduleNextRefreshRef.current = null;
+    };
   }, []);
 
   const handleAcknowledge = async (id: string) => {
-    setIntents(prev => prev.map(i => i.id === id ? { ...i, status: 'acknowledged' } : i));
-    await fetch('/api/ingest', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status: 'acknowledged' })
+    startTransition(() => {
+      setIntents((current) =>
+        current.map((intent) =>
+          intent.id === id ? { ...intent, status: "acknowledged" } : intent
+        )
+      );
     });
+
+    try {
+      await fetch("/api/ingest", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: "acknowledged" }),
+      });
+    } finally {
+      scheduleNextRefreshRef.current?.(1000);
+    }
   };
 
-  const pendingCount = intents.filter(i => i.status === 'pending').length;
-  const criticalCount = intents.filter(i => i.urgency >= 4 && i.status === 'pending').length;
-
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-8" role="main" aria-label="Operator Command Center">
-      {/* Skip to incidents */}
+    <div
+      className="min-h-screen bg-slate-900 p-8 text-slate-100"
+      role="main"
+      aria-label="Operator Command Center"
+    >
       <a
         href="#incident-feed"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-white"
       >
         Skip to incident feed
       </a>
 
-      <header className="mb-8 flex items-center justify-between border-b border-slate-800 pb-4" role="banner">
+      <header
+        className="mb-8 flex items-center justify-between border-b border-slate-800 pb-4"
+        role="banner"
+      >
         <div className="flex items-center gap-6">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <ShieldAlert className="text-red-500 w-8 h-8" aria-hidden="true" />
+            <h1 className="flex items-center gap-3 text-3xl font-bold text-white">
+              <ShieldAlert className="h-8 w-8 text-red-500" aria-hidden="true" />
               Command Center
             </h1>
-            <p className="text-slate-400 text-sm mt-2">Universal Bridge — Operator View</p>
+            <p className="mt-2 text-sm text-slate-400">
+              Universal Bridge - Operator View
+            </p>
           </div>
-          
+
           <div className="h-10 w-px bg-slate-800" aria-hidden="true" />
-          
-          <div className="flex items-center gap-3 bg-slate-800/50 px-4 py-2 rounded-lg border border-slate-700/50">
+
+          <div className="flex items-center gap-3 rounded-lg border border-slate-700/50 bg-slate-800/50 px-4 py-2">
             {user.image ? (
-              <Image 
-                src={user.image} 
-                alt="" 
-                width={32} 
-                height={32} 
-                className="w-8 h-8 rounded-full border border-slate-600" 
+              <Image
+                src={user.image}
+                alt=""
+                width={32}
+                height={32}
+                className="h-8 w-8 rounded-full border border-slate-600"
               />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center border border-slate-600">
-                <User className="w-4 h-4 text-slate-400" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-600 bg-slate-700">
+                <User className="h-4 w-4 text-slate-400" />
               </div>
             )}
             <div className="text-sm">
-              <p className="text-white font-medium leading-none">{user.name || "Operator"}</p>
-              <p className="text-slate-500 text-xs mt-1">{user.email}</p>
+              <p className="font-medium leading-none text-white">
+                {user.name || "Operator"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{user.email}</p>
             </div>
-            <button 
+            <button
               onClick={() => signOut()}
-              className="ml-2 p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors group"
+              className="group ml-2 rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-400/10 hover:text-red-400"
               title="Sign Out"
               aria-label="Sign Out"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -120,151 +196,200 @@ export default function OperatorDashboardClient({ user }: { user: UserSession })
         <div className="flex items-center gap-4">
           {criticalCount > 0 && (
             <div
-              className="bg-red-900/50 border border-red-700 px-4 py-2 rounded-lg text-sm font-bold text-red-300 animate-pulse"
+              className="rounded-lg border border-red-700 bg-red-900/50 px-4 py-2 text-sm font-bold text-red-300"
               role="status"
               aria-live="assertive"
             >
               {criticalCount} CRITICAL
             </div>
           )}
-          <div className="bg-slate-800 px-4 py-2 rounded-lg text-sm font-mono flex items-center gap-2">
-            <span aria-label="System online indicator" className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <div className="flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-mono">
+            <span
+              aria-label="System online indicator"
+              className="h-2 w-2 rounded-full bg-green-500"
+            />
             System Online
           </div>
-          <div className="bg-slate-800 px-3 py-2 rounded-lg text-sm">
+          <div className="rounded-lg bg-slate-800 px-3 py-2 text-sm">
             <span className="text-slate-400">Queue: </span>
-            <span className="font-bold text-white" aria-live="polite">{pendingCount}</span>
+            <span className="font-bold text-white" aria-live="polite">
+              {pendingCount}
+            </span>
           </div>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-4" id="incident-feed" role="feed" aria-label="Incident feed">
-        <AnimatePresence>
-          {intents.length === 0 && (
-            <div className="text-center py-32 text-slate-500 border-2 border-dashed border-slate-800 rounded-2xl" role="status">
-              No active incidents in the pipeline.
-            </div>
-          )}
-          {intents.map((intent) => (
-            <motion.article
-              key={intent.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              role={intent.urgency >= 4 && intent.status === 'pending' ? 'alert' : 'article'}
-              aria-label={`Incident: ${intent.intent_summary}. Severity level ${intent.urgency}. Status: ${intent.status}.`}
-              className={`p-6 rounded-xl border ${
-                intent.status === 'acknowledged' ? 'bg-slate-800 border-slate-700 opacity-60' :
-                intent.urgency >= 4 ? 'bg-red-950/40 border-red-900/50' : 'bg-amber-950/20 border-amber-900/40'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className={`px-3 py-1 text-xs font-bold rounded ${
-                    intent.urgency >= 4 ? 'bg-red-500 text-white' :
-                    intent.urgency >= 3 ? 'bg-amber-500 text-amber-950' :
-                    'bg-green-600 text-white'
-                  }`}>
-                    SEVERITY {intent.urgency}
-                  </div>
-                  {/* Modality badges */}
-                  {intent.input_modalities?.map(m => (
-                    <span key={m} className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded text-xs text-slate-300">
-                      {m === 'image' && <ImageIcon className="w-3 h-3" aria-hidden="true" />}
-                      {m === 'audio' && <Mic className="w-3 h-3" aria-hidden="true" />}
-                      {m}
-                    </span>
-                  ))}
-                  <div className="text-sm font-mono text-slate-400 flex items-center gap-1">
-                    <Clock className="w-4 h-4" aria-hidden="true" />
-                    <time dateTime={intent.timestamp}>
-                      {new Date(intent.timestamp).toLocaleTimeString()}
-                    </time>
-                  </div>
+      <div
+        className="grid grid-cols-1 gap-4"
+        id="incident-feed"
+        role="feed"
+        aria-label="Incident feed"
+      >
+        {intents.length === 0 && (
+          <div
+            className="rounded-2xl border-2 border-dashed border-slate-800 py-32 text-center text-slate-500"
+            role="status"
+          >
+            No active incidents in the pipeline.
+          </div>
+        )}
+
+        {intents.map((intent) => (
+          <article
+            key={intent.id}
+            role={
+              intent.urgency >= 4 && intent.status === "pending" ? "alert" : "article"
+            }
+            aria-label={`Incident: ${intent.intent_summary}. Severity level ${intent.urgency}. Status: ${intent.status}.`}
+            className={`rounded-xl border p-6 ${
+              intent.status === "acknowledged"
+                ? "border-slate-700 bg-slate-800 opacity-60"
+                : intent.urgency >= 4
+                  ? "border-red-900/50 bg-red-950/40"
+                  : "border-amber-900/40 bg-amber-950/20"
+            }`}
+          >
+            <div className="mb-4 flex items-start justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <div
+                  className={`rounded px-3 py-1 text-xs font-bold ${
+                    intent.urgency >= 4
+                      ? "bg-red-500 text-white"
+                      : intent.urgency >= 3
+                        ? "bg-amber-500 text-amber-950"
+                        : "bg-green-600 text-white"
+                  }`}
+                >
+                  SEVERITY {intent.urgency}
                 </div>
-                {intent.status === 'pending' ? (
-                  <button
-                    onClick={() => handleAcknowledge(intent.id)}
-                    className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-sm font-medium transition-colors flex items-center gap-2 focus:ring-4 focus:ring-blue-400 focus:outline-none"
-                    aria-label={`Acknowledge incident: ${intent.intent_summary}`}
+                {intent.input_modalities?.map((modality) => (
+                  <span
+                    key={modality}
+                    className="flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs text-slate-300"
                   >
-                    <Check className="w-4 h-4" aria-hidden="true" /> Acknowledge
-                  </button>
-                ) : (
-                  <span className="text-green-500 text-sm font-bold flex items-center gap-1" aria-label="Acknowledged">
-                    <Check className="w-4 h-4" aria-hidden="true" /> Acknowledged
+                    {modality === "image" && (
+                      <ImageIcon className="h-3 w-3" aria-hidden="true" />
+                    )}
+                    {modality === "audio" && (
+                      <Mic className="h-3 w-3" aria-hidden="true" />
+                    )}
+                    {modality}
                   </span>
+                ))}
+                <div className="flex items-center gap-1 text-sm font-mono text-slate-400">
+                  <Clock className="h-4 w-4" aria-hidden="true" />
+                  <time dateTime={intent.timestamp}>
+                    {timeFormatter.format(new Date(intent.timestamp))}
+                  </time>
+                </div>
+              </div>
+
+              {intent.status === "pending" ? (
+                <button
+                  onClick={() => handleAcknowledge(intent.id)}
+                  className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-400"
+                  aria-label={`Acknowledge incident: ${intent.intent_summary}`}
+                >
+                  <Check className="h-4 w-4" aria-hidden="true" />
+                  Acknowledge
+                </button>
+              ) : (
+                <span
+                  className="flex items-center gap-1 text-sm font-bold text-green-500"
+                  aria-label="Acknowledged"
+                >
+                  <Check className="h-4 w-4" aria-hidden="true" />
+                  Acknowledged
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-slate-500">
+                  AI Extracted Intent
+                </h3>
+                <p className="mb-4 text-lg font-medium text-white">
+                  {intent.intent_summary}
+                </p>
+
+                <h3 className="mb-2 text-xs font-bold uppercase text-slate-500">
+                  Recommended Action
+                </h3>
+                <div className="rounded border border-slate-800 bg-slate-900/50 p-3 font-mono text-sm text-emerald-400">
+                  {">"} {intent.recommended_action}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-slate-500">
+                  Raw User Input
+                </h3>
+                <div className="min-h-[80px] rounded border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
+                  &quot;{intent.raw_text}&quot;
+                </div>
+
+                {intent.attachments.length > 0 && (
+                  <div className="mt-4">
+                    <h3 className="mb-3 text-xs font-bold uppercase text-slate-500">
+                      Attached Media
+                    </h3>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {intent.attachments.map((attachment) => (
+                        <div
+                          key={attachment.gcs_uri}
+                          className="flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900"
+                        >
+                          {attachment.type === "image" ? (
+                            <>
+                              <div className="flex aspect-video w-full items-center justify-center overflow-hidden bg-slate-800">
+                                <Image
+                                  src={attachment.public_url}
+                                  alt={attachment.original_name}
+                                  width={320}
+                                  height={180}
+                                  className="h-full w-full object-contain"
+                                />
+                              </div>
+                              <div className="flex items-center justify-between border-t border-slate-800 p-2">
+                                <span className="flex truncate text-[10px] text-slate-500">
+                                  {attachment.original_name}
+                                </span>
+                                <a
+                                  href={attachment.public_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-blue-400 underline hover:text-blue-300"
+                                >
+                                  View Full
+                                </a>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="p-3">
+                              <div className="mb-2 flex items-center gap-2">
+                                <FileAudio className="h-3 w-3 text-blue-400" />
+                                <span className="truncate font-mono text-[10px] text-slate-400">
+                                  {attachment.original_name}
+                                </span>
+                              </div>
+                              <audio controls className="h-8 w-full origin-left scale-75">
+                                <source
+                                  src={attachment.public_url}
+                                  type={attachment.mime_type}
+                                />
+                              </audio>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-xs uppercase font-bold text-slate-500 mb-2">AI Extracted Intent</h3>
-                  <p className="text-lg font-medium text-white mb-4">{intent.intent_summary}</p>
-
-                  <h3 className="text-xs uppercase font-bold text-slate-500 mb-2">Recommended Action</h3>
-                  <div className="bg-slate-900/50 rounded p-3 text-emerald-400 font-mono text-sm border border-slate-800">
-                    {'>'} {intent.recommended_action}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xs uppercase font-bold text-slate-500 mb-2">Raw User Input</h3>
-                  <div className="bg-slate-900 rounded p-4 text-slate-300 min-h-[80px] border border-slate-800 font-sans text-sm">
-                    &quot;{intent.raw_text}&quot;
-                  </div>
-                  
-                  {/* Media Rendering */}
-                  {intent.attachments && intent.attachments.length > 0 && (
-                    <div className="mt-4">
-                      <h3 className="text-xs uppercase font-bold text-slate-500 mb-3">Attached Media</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {intent.attachments.map((a, i) => (
-                          <div key={i} className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col">
-                            {a.type === 'image' ? (
-                              <>
-                                <div className="aspect-video w-full bg-slate-800 flex items-center justify-center overflow-hidden">
-                                  <Image 
-                                    src={a.public_url} 
-                                    alt={a.original_name} 
-                                    width={320}
-                                    height={180}
-                                    className="w-full h-full object-contain hover:scale-105 transition-transform"
-                                  />
-                                </div>
-                                <div className="p-2 border-t border-slate-800 flex items-center justify-between">
-                                  <span className="text-[10px] text-slate-500 flex items-center gap-1 truncate">
-                                    <ImageIcon className="w-3 h-3" /> {a.original_name}
-                                  </span>
-                                  <a 
-                                    href={a.public_url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="text-[10px] text-blue-400 hover:text-blue-300 underline"
-                                  >
-                                    View Full
-                                  </a>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="p-3">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <FileAudio className="w-3 h-3 text-blue-400" />
-                                  <span className="text-[10px] text-slate-400 truncate font-mono">{a.original_name}</span>
-                                </div>
-                                <audio controls className="w-full h-8 scale-75 origin-left">
-                                  <source src={a.public_url} type={a.mime_type} />
-                                </audio>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.article>
-          ))}
-        </AnimatePresence>
+            </div>
+          </article>
+        ))}
       </div>
     </div>
   );

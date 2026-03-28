@@ -105,29 +105,28 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Upload files to GCS (or local fallback) for audit trail
-    const attachments: Attachment[] = [];
-
-    if (imageBuffer) {
-      const uploadResult = await uploadFile(imageBuffer, imageFileName, imageMimeType);
-      attachments.push({
-        type: 'image',
-        gcs_uri: uploadResult.uri,
-        public_url: uploadResult.publicUrl,
-        original_name: uploadResult.originalName,
-        mime_type: imageMimeType,
-      });
-    }
-
-    if (audioBuffer) {
-      const uploadResult = await uploadFile(audioBuffer, audioFileName, audioMimeType);
-      attachments.push({
-        type: 'audio',
-        gcs_uri: uploadResult.uri,
-        public_url: uploadResult.publicUrl,
-        original_name: uploadResult.originalName,
-        mime_type: audioMimeType,
-      });
-    }
+    const attachments = (
+      await Promise.all([
+        imageBuffer
+          ? uploadFile(imageBuffer, imageFileName, imageMimeType).then((uploadResult) => ({
+              type: 'image' as const,
+              gcs_uri: uploadResult.uri,
+              public_url: uploadResult.publicUrl,
+              original_name: uploadResult.originalName,
+              mime_type: imageMimeType,
+            }))
+          : null,
+        audioBuffer
+          ? uploadFile(audioBuffer, audioFileName, audioMimeType).then((uploadResult) => ({
+              type: 'audio' as const,
+              gcs_uri: uploadResult.uri,
+              public_url: uploadResult.publicUrl,
+              original_name: uploadResult.originalName,
+              mime_type: audioMimeType,
+            }))
+          : null,
+      ])
+    ).filter((attachment): attachment is Attachment => attachment !== null);
 
     // 6. Build multi-modal parts for Gemini
     const geminiParts: GeminiInputParts = {};
@@ -168,7 +167,14 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const intents = await getAllIntents();
-    return NextResponse.json({ intents });
+    return NextResponse.json(
+      { intents },
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
+    );
   } catch {
     return NextResponse.json({ error: 'Database Error' }, { status: 500 });
   }

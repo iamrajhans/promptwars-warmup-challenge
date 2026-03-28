@@ -8,8 +8,8 @@ export default defineConfig({
     exclude: ['e2e/**', 'node_modules/**'],
     coverage: {
       provider: 'v8',
-      include: ['src/lib/**/*.ts'],
-      exclude: ['src/lib/**/__tests__/**'],
+      include: ['src/lib/**/*.ts', 'src/app/api/**/*.ts'],
+      exclude: ['src/lib/**/__tests__/**', 'src/app/api/**/*.test.ts'],
       reporter: ['text', 'text-summary'],
     },
   },

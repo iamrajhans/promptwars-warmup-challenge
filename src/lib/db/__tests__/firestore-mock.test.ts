@@ -72,6 +72,15 @@ describe('saveIntent', () => {
 });
 
 describe('getAllIntents', () => {
+  it('should initialize the store when global.mockIntents is undefined', async () => {
+    global.mockIntents = undefined;
+
+    const all = await getAllIntents();
+
+    expect(all).toEqual([]);
+    expect(global.mockIntents).toEqual([]);
+  });
+
   it('should return empty array when store has no intents', async () => {
     // This covers the `|| []` branch when mockIntents is set to empty
     const all = await getAllIntents();

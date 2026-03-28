@@ -7,7 +7,7 @@ const mockIntents = [
     urgency: 5,
     recommended_action: 'Dispatch fire units immediately',
     input_modalities: ['text', 'image'],
-    attachments: [{ type: 'image', gcs_uri: 'local://img', public_url: 'http://localhost/img', original_name: 'fire.jpg', mime_type: 'image/jpeg' }],
+    attachments: [{ type: 'image', gcs_uri: 'local://img', public_url: 'https://storage.googleapis.com/mock-bucket/fire.jpg', original_name: 'fire.jpg', mime_type: 'image/jpeg' }],
     status: 'pending',
     timestamp: new Date().toISOString(),
     raw_text: 'Fire at the factory',
@@ -27,7 +27,7 @@ const mockIntents = [
 
 test.describe('Operator Dashboard — /operator', () => {
   test.beforeEach(async ({ page }) => {
-    // Mock the polling endpoint to return controlled data
+    // Mock the client refresh endpoint to return controlled data after hydration.
     await page.route('/api/ingest', route => {
       if (route.request().method() === 'GET') {
         return route.fulfill({
@@ -53,6 +53,11 @@ test.describe('Operator Dashboard — /operator', () => {
   test('should display all incidents from the feed', async ({ page }) => {
     await expect(page.getByText('Structure fire at industrial complex')).toBeVisible();
     await expect(page.getByText('Minor traffic incident on side street')).toBeVisible();
+  });
+
+  test('should replace the initial empty shell after client refresh', async ({ page }) => {
+    await expect(page.getByText('Structure fire at industrial complex')).toBeVisible();
+    await expect(page.getByText('No active incidents in the pipeline.')).toHaveCount(0);
   });
 
   test('should show critical incident counter in header', async ({ page }) => {
@@ -137,6 +142,28 @@ test.describe('Operator Dashboard — Empty State', () => {
 
     await page.goto('/operator');
     await expect(page.getByText('No active incidents in the pipeline.')).toBeVisible();
+  });
+});
+
+test.describe('Operator Dashboard — Refresh Behavior', () => {
+  test('should request ingest data after loading the page', async ({ page }) => {
+    let getRequestCount = 0;
+
+    await page.route('/api/ingest', route => {
+      if (route.request().method() === 'GET') {
+        getRequestCount += 1;
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ intents: mockIntents }),
+        });
+      }
+
+      return route.continue();
+    });
+
+    await page.goto('/operator');
+    await expect.poll(() => getRequestCount).toBeGreaterThan(0);
   });
 });
 
