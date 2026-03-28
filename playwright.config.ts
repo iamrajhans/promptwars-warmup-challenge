@@ -8,11 +8,19 @@ export default defineConfig({
     baseURL: 'http://localhost:3000',
     headless: true,
     screenshot: 'only-on-failure',
+    extraHTTPHeaders: {
+      'x-playwright-test': 'true',
+    },
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { 
+        ...devices['Desktop Chrome'],
+        extraHTTPHeaders: {
+          'x-playwright-test': 'true',
+        },
+      },
     },
   ],
   // Start dev server automatically for e2e tests

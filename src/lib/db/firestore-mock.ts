@@ -3,6 +3,7 @@ import { ParsedIntent } from '../ai/gemini';
 export interface Attachment {
   type: 'image' | 'audio';
   gcs_uri: string;
+  public_url: string; // Add public URL for UI rendering
   original_name: string;
   mime_type: string;
 }

@@ -474,12 +474,32 @@ export default function ConsumerPortal() {
                 </div>
                 {intentResult.attachments && intentResult.attachments.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-bold uppercase text-slate-400 mb-1">Attachments</h3>
-                    <div className="flex gap-2 flex-wrap">
+                    <h3 className="text-xs font-bold uppercase text-slate-400 mb-2">Attached Media</h3>
+                    <div className="space-y-3">
                       {intentResult.attachments.map((a: any, i: number) => (
-                        <span key={i} className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-lg">
-                          {a.type}: {a.original_name}
-                        </span>
+                        <div key={i} className="rounded-xl overflow-hidden border border-slate-100 bg-slate-50 p-2">
+                          {a.type === 'image' ? (
+                            <div className="space-y-2">
+                              <img 
+                                src={a.public_url} 
+                                alt={a.original_name} 
+                                className="w-full h-48 object-cover rounded-lg shadow-sm"
+                              />
+                              <p className="text-[10px] text-slate-400 px-1 truncate">{a.original_name}</p>
+                            </div>
+                          ) : (
+                            <div className="p-2 space-y-2">
+                              <div className="flex items-center gap-2 mb-1">
+                                <FileAudio className="w-4 h-4 text-blue-600" />
+                                <span className="text-xs font-medium text-slate-700 truncate">{a.original_name}</span>
+                              </div>
+                              <audio controls className="w-full h-8 scale-90 origin-left">
+                                <source src={a.public_url} type={a.mime_type} />
+                                Your browser does not support the audio element.
+                              </audio>
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -520,6 +540,15 @@ export default function ConsumerPortal() {
           )}
         </AnimatePresence>
       </div>
+      <footer className="absolute bottom-4 right-4 text-xs text-slate-400">
+        <a 
+          href="/operator" 
+          className="hover:text-blue-500 underline transition-colors"
+          aria-label="Operator access login"
+        >
+          Operator Access
+        </a>
+      </footer>
     </main>
   );
 }

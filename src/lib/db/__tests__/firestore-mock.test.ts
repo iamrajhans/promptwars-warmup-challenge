@@ -27,6 +27,11 @@ describe('saveIntent', () => {
     expect(doc.timestamp).toBeDefined();
     expect(new Date(doc.timestamp).getTime()).not.toBeNaN();
     expect(doc.attachments).toEqual([]);
+
+    // Check history initialization
+    expect(doc.history).toHaveLength(1);
+    expect(doc.history[0].action).toBe('Created');
+    expect(doc.history[0].metadata.initial_status).toBe('pending');
   });
 
   it('should spread all intent fields into the document', async () => {
@@ -100,6 +105,12 @@ describe('updateIntentStatus', () => {
 
     const all = await getAllIntents();
     expect(all[0].status).toBe('acknowledged');
+
+    // Check history update
+    expect(all[0].history).toHaveLength(2);
+    expect(all[0].history[1].action).toBe('Status Changed');
+    expect(all[0].history[1].metadata.from).toBe('pending');
+    expect(all[0].history[1].metadata.to).toBe('acknowledged');
   });
 
   it('should update an intent to resolved', async () => {

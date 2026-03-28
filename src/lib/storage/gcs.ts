@@ -5,6 +5,7 @@
 
 export interface UploadResult {
   uri: string;
+  publicUrl: string; // Add publicUrl for frontend rendering
   originalName: string;
   mimeType: string;
   sizeBytes: number;
@@ -36,7 +37,7 @@ export async function uploadFile(
       const bucket = storage.bucket(bucketName);
 
       const datePrefix = new Date().toISOString().split('T')[0];
-      const gcsPath = `uploads/${datePrefix}/${filename}`;
+      const gcsPath = `uploads/${datePrefix}/${filename}-${Date.now()}`;
       const file = bucket.file(gcsPath);
 
       await file.save(buffer, {
@@ -44,8 +45,16 @@ export async function uploadFile(
         resumable: false,
       });
 
+      // Generate a Signed URL for the frontend (valid for 1 hour)
+      const [signedUrl] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + 60 * 60 * 1000, // 1 hour
+      });
+
       return {
         uri: `gs://${bucketName}/${gcsPath}`,
+        publicUrl: signedUrl,
         originalName: filename,
         mimeType,
         sizeBytes: buffer.length,
@@ -60,11 +69,15 @@ export async function uploadFile(
   const localId = `local_${Date.now()}_${filename}`;
   const base64 = buffer.toString('base64');
   localStore.set(localId, base64);
+  
+  // Create a data URI for direct browser rendering
+  const dataUrl = `data:${mimeType};base64,${base64}`;
 
   console.info(`[Storage] File stored locally as ${localId} (${buffer.length} bytes). Configure GCS_BUCKET_NAME for cloud storage.`);
 
   return {
     uri: `local://${localId}`,
+    publicUrl: dataUrl,
     originalName: filename,
     mimeType,
     sizeBytes: buffer.length,

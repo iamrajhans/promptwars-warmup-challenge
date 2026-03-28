@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Hoist mock before any imports
-const { mockSave, mockFile, mockBucket } = vi.hoisted(() => {
+const { mockSave, mockFile, mockBucket, mockGetSignedUrl } = vi.hoisted(() => {
   const mockSave = vi.fn().mockResolvedValue(undefined);
-  const mockFile = vi.fn(() => ({ save: mockSave }));
+  const mockGetSignedUrl = vi.fn().mockResolvedValue(['https://signed-url.com/test.png']);
+  const mockFile = vi.fn(() => ({ 
+    save: mockSave,
+    getSignedUrl: mockGetSignedUrl
+  }));
   const mockBucket = vi.fn(() => ({ file: mockFile }));
-  return { mockSave, mockFile, mockBucket };
+  return { mockSave, mockFile, mockBucket, mockGetSignedUrl };
 });
 
 vi.mock('@google-cloud/storage', () => ({
@@ -24,6 +28,7 @@ beforeEach(() => {
   mockSave.mockClear();
   mockFile.mockClear();
   mockBucket.mockClear();
+  mockGetSignedUrl.mockClear();
   delete process.env.GCS_BUCKET_NAME;
   delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
 });
@@ -34,6 +39,7 @@ describe('uploadFile - local fallback', () => {
     const result = await uploadFile(buffer, 'test.jpg', 'image/jpeg');
 
     expect(result.uri).toMatch(/^local:\/\//);
+    expect(result.publicUrl).toMatch(/^data:image\/jpeg;base64,/);
     expect(result.originalName).toBe('test.jpg');
     expect(result.mimeType).toBe('image/jpeg');
     expect(result.sizeBytes).toBe(buffer.length);
@@ -64,6 +70,7 @@ describe('uploadFile - local fallback', () => {
     expect(result.mimeType).toBe('audio/webm');
     expect(result.originalName).toBe('recording.webm');
     expect(result.storedLocally).toBe(true);
+    expect(result.publicUrl).toContain('data:audio/webm;base64,');
   });
 
   it('should fall back when bucket is not set but credentials exist', async () => {
@@ -74,7 +81,7 @@ describe('uploadFile - local fallback', () => {
 });
 
 describe('uploadFile - GCS success path', () => {
-  it('should upload to GCS and return a gs:// URI when both env vars are set', async () => {
+  it('should upload to GCS and return a gs:// URI with signed publicUrl when env vars are set', async () => {
     process.env.GCS_BUCKET_NAME = 'my-test-bucket';
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/fake/path.json';
 
@@ -82,6 +89,7 @@ describe('uploadFile - GCS success path', () => {
     const result = await uploadFile(buffer, 'photo.jpg', 'image/jpeg');
 
     expect(result.uri).toMatch(/^gs:\/\/my-test-bucket\//);
+    expect(result.publicUrl).toBe('https://signed-url.com/test.png');
     expect(result.originalName).toBe('photo.jpg');
     expect(result.mimeType).toBe('image/jpeg');
     expect(result.sizeBytes).toBe(buffer.length);
@@ -94,16 +102,18 @@ describe('uploadFile - GCS success path', () => {
       metadata: { contentType: 'image/jpeg' },
       resumable: false,
     });
+    expect(mockGetSignedUrl).toHaveBeenCalled();
   });
 
-  it('should organize files under date-prefixed paths in GCS', async () => {
+  it('should organize files under date-prefixed paths with timestamps in GCS', async () => {
     process.env.GCS_BUCKET_NAME = 'my-bucket';
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/fake/creds.json';
 
     await uploadFile(Buffer.from('data'), 'audio.webm', 'audio/webm');
 
     const calledPath = (mockFile.mock.calls[0] as string[])[0];
-    expect(calledPath).toMatch(/^uploads\/\d{4}-\d{2}-\d{2}\/audio\.webm$/);
+    // Path should now end with a timestamp suffix
+    expect(calledPath).toMatch(/^uploads\/\d{4}-\d{2}-\d{2}\/audio\.webm-\d+$/);
   });
 
   it('should fall back to local if GCS save throws', async () => {

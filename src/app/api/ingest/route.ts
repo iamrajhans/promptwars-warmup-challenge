@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
       attachments.push({
         type: 'image',
         gcs_uri: uploadResult.uri,
+        public_url: uploadResult.publicUrl,
         original_name: uploadResult.originalName,
         mime_type: imageMimeType,
       });
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
       attachments.push({
         type: 'audio',
         gcs_uri: uploadResult.uri,
+        public_url: uploadResult.publicUrl,
         original_name: uploadResult.originalName,
         mime_type: audioMimeType,
       });
