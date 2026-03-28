@@ -144,10 +144,11 @@ graph TB
 *   **Background Jobs:** Deferred. The user will wait synchronously for the LLM resolution, keeping architecture bone-dry.
 
 ## 10. Data Architecture
-*   **Database:** Firestore.
+*   **Database:** Firestore (Transactional & Real-time) + BigQuery (Long-term Analytics).
 *   **Schema Strategy:**
     *   `/users/{userId}`
     *   `/intents/{intentId}` (Contains raw_text, parsed_json_from_gemini, status: pending/acknowledged)
+        *   `/history/{timestamp}` (Detailed audit log capturing status transitions, routing events, and operator metadata)
 
 ## 11. Infrastructure and Platform Design
 *   **Cloud Topology:** Single Region.
@@ -160,8 +161,8 @@ graph TB
 
 ## 13. Scalability Plan to Millions of Users
 *   **MVP (Current):** Next.js Monolith + Firestore + Vertex AI Gemini 3.1 Pro. Highly limited footprint.
-*   **Growth Stage:** Split Next.js into separate FastAPI microservice. Introduce Cloud DLP for rigid privacy.
-*   **Large-Scale:** Introduce Cloud Pub/Sub for asynchronous processing and Cloud Armor for edge WAF protection. Transition to multi-region global footprint.
+*   **Growth Stage:** Split Next.js into separate FastAPI microservice. Introduce **Cloud DLP** for rigid privacy/PII redaction before storing historical data. Introduce **BigQuery** connected to Looker Studio for long-term historical incident analytics and dashboards.
+*   **Large-Scale:** Introduce **Cloud Pub/Sub** for asynchronous processing to decouple event routing—enabling history logging without blocking the real-time Operator feed—and Cloud Armor for edge WAF protection. Transition to multi-region global footprint.
 
 ## 14. MVP First Plan
 **Goal:** Prove the core premise—messy human input converted to structured actionable alerts for an operator in under 5 seconds—with the absolute minimum Google Cloud footprint.
